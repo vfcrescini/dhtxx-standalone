@@ -1,0 +1,5 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: dhtxx
+Files: *
+Copyright: Copyright 2022 Vino Fernando Crescini <vfcrescini@gmail.com>
+License: GPL-3+

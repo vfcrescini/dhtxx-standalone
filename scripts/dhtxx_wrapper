@@ -1,0 +1,145 @@
+#!/bin/sh
+
+# Copyright (C) 2022 Vino Fernando Crescini <vfcrescini@gmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+# 2021-10-02 dhtxx_wrapper
+
+# Wrapper to the dhtxx binary to handle averaging
+
+
+# Path to the configuration file
+
+CONF_PATH="/etc/dhtxx.conf"
+
+# Path to the binary
+
+CMD_PATH="/usr/bin/dhtxx"
+
+# Type of sensor: DHT11 or DHT22
+
+TYPE="DHT22"
+
+# The GPIO pin to which the sensor is connected
+
+GPIO=23
+
+# Maximum number of failed reading attempts before giving up
+
+MAX_FAILURE=3
+
+# Minimum number of consecutive successful reading attempts
+
+MIN_SUCCESS=3
+
+# Maximum number of attempts to be made
+
+MAX_ATTEMPT=10
+
+
+# main
+
+total_attempt=0
+total_failure=0
+total_success=0
+
+first_success=0
+
+sum_hum=0
+sum_tmp=0
+
+if [ ! -r "${CONF_PATH}" ]; then
+  echo "Failed: configuration file ${CONF_PATH} is not readable" >&2
+  exit 1
+fi
+
+if [ ! -x "${CMD_PATH}" ]; then
+  echo "Failed: binary file ${CMD_PATH} is not executable" >&2
+  exit 2
+fi
+
+if ! . "${CONF_PATH}"; then
+  echo "Failed: unable to source configuration file ${CONF_PATH}" >&2
+  exit 3
+fi
+
+if [ "${TYPE}" != "DHT11" ] && [ "${TYPE}" != "DHT22" ]; then
+  echo "Failed: invalid type: ${TYPE}" >&2
+  exit 4
+fi
+
+# compose command
+
+cmd="${CMD_PATH}"
+
+if [ "${TYPE}" = "DHT11" ]; then
+  cmd="${cmd} -d"
+fi
+
+cmd="${cmd} ${GPIO}"
+
+# start loop
+
+while true; do
+
+  sleep=0
+
+  output=`${cmd} 2> /dev/null`
+
+  if [ ${?} -ne 0 ]; then
+
+    total_failure=$((${total_failure} + 1))
+
+    # we want consecutive successes, so discard previous successes on failure
+
+    total_success=0
+    sum_hum=0
+    sum_tmp=0
+
+    sleep=1
+
+  else
+
+    # discard first success
+
+    if [ ${first_success} -eq 0 ]; then
+      first_success=1
+    else
+      total_success=$((${total_success} + 1))
+
+      eval `echo $output | sed -e 's/\([^ ]\+\)[ ]\+\([^ ]\+\)/cur_hum=\1; cur_tmp=\2/'`
+
+      sum_hum=`echo ${sum_hum} ${cur_hum} | awk '{ printf("%0.3f\n", $1 + $2) }'`
+      sum_tmp=`echo ${sum_tmp} ${cur_tmp} | awk '{ printf("%0.3f\n", $1 + $2) }'`
+    fi
+
+    sleep=2
+
+  fi
+
+  total_attempt=$((${total_attempt} + 1))
+
+  if [ ${total_failure} -ge ${MAX_FAILURE} ]; then
+    echo "Failed: too many failed fetches" >&2
+    exit 5
+  fi
+
+  if [ ${total_attempt} -ge ${MAX_ATTEMPT} ]; then
+    echo "Failed: too many fetches" >&2
+    exit 6
+  fi
+
+  if [ ${total_success} -ge ${MIN_SUCCESS} ]; then
+    hum=`echo ${sum_hum} ${total_success} | awk '{ printf("%0.3f\n", $1 / $2) }'`
+    tmp=`echo ${sum_tmp} ${total_success} | awk '{ printf("%0.3f\n", $1 / $2) }'`
+
+    printf "%8.3f %8.3f\n" "${hum}" "${tmp}"
+
+    break
+  fi
+
+  sleep ${sleep}
+  
+done
+
+exit 0

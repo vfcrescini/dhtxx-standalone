@@ -1,0 +1,10 @@
+Package: dhtxx
+Version: 0.0.1-1
+Section: devel
+Priority: optional
+Architecture: %ARCH%
+Depends: libc6, python3
+Maintainer: Vino Fernando Crescini <vfcrescini@gmail.com>
+Description: Basic DHTXX Driver
+ Very basic driver, library and Python 3 module for the DHT11 and DHT22
+ sensors.
